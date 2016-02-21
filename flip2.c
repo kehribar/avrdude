@@ -149,6 +149,7 @@ static int flip2_paged_write(PROGRAMMER* pgm, AVRPART *part, AVRMEM *mem,
 static int flip2_read_sig_bytes(PROGRAMMER* pgm, AVRPART *part, AVRMEM *mem);
 static void flip2_setup(PROGRAMMER * pgm);
 static void flip2_teardown(PROGRAMMER * pgm);
+static int flip2_parseextparams(PROGRAMMER* pgm, LISTID extparams);
 
 /* INTERNAL PROGRAMMER FUNCTION PROTOTYPES */
 
@@ -193,6 +194,7 @@ void flip2_initpgm(PROGRAMMER *pgm)
   pgm->read_sig_bytes   = flip2_read_sig_bytes;
   pgm->setup            = flip2_setup;
   pgm->teardown         = flip2_teardown;
+  pgm->parseextparams   = flip2_parseextparams;
 }
 
 /* EXPORTED PROGRAMMER FUNCTION DEFINITIONS */
@@ -325,6 +327,48 @@ void flip2_close(PROGRAMMER* pgm)
     dfu_close(FLIP2(pgm)->dfu);
     FLIP2(pgm)->dfu = NULL;
   }
+}
+
+void flip2_start_application(PROGRAMMER* pgm)
+{
+  int cmd_result = 0;
+  struct flip2_cmd cmd = {
+    FLIP2_CMD_GROUP_EXEC, FLIP2_CMD_START_APP, { 0x00, 0, 0, 0 }
+  };
+
+  cmd_result = dfu_dnload(FLIP2(pgm)->dfu, &cmd, sizeof(cmd));
+
+  if (smd_result != 0)
+   fprintf(stderr, "%s: Error: Failed to set start application\n",
+        progname);
+
+  flip2_close(pgm);
+}
+
+int flip2_parseextparams(PROGRAMMER* pgm, LISTID extparams)
+{
+ LNODEID ln;
+ const char *extended_param;
+ int rv = 0;
+
+ for (ln = lfirst(extparams); ln; ln = lnext(ln)) {
+  extended_param = ldata(ln);
+   if (strncmp(extended_param, "start", strlen("start")) == 0) {
+     if (verbose >= 2) {
+      fprintf(stderr,
+                    "%s: flip2_parseextparams(): start application\n",
+		    progname);
+     }
+      pgm->close = flip2_start_application;
+      continue;
+
+      fprintf(stderr,
+             "%s: flip2_parseextparams(): invalid extended parameter '%s'\n",
+            progname, extended_param);
+      rv = -1;
+   }
+
+   return rv;
 }
 
 void flip2_enable(PROGRAMMER* pgm)
